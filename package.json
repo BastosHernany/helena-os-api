@@ -1,0 +1,26 @@
+{
+  "name": "helena-os-api",
+  "version": "0.1.0",
+  "description": "AI OS para PMEs brasileiras",
+  "main": "src/index.ts",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "build": "tsc",
+    "build:start": "node dist/index.js",
+    "test:db": "tsx src/lib/test-connection.ts",
+    "test:leads": "tsx src/agents/test-lead-agent.ts",
+    "test:campaigns": "tsx src/agents/test-campaign-agent.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.102.0",
+    "@supabase/supabase-js": "^2.108.0",
+    "dotenv": "^16.6.1",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.42",
+    "tsx": "^4.22.4",
+    "typescript": "^5.9.3"
+  }
+}
