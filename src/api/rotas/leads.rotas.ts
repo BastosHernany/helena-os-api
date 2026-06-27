@@ -11,7 +11,7 @@ rotasLeads.use(middlewareAutenticacao);
 rotasLeads.get("/", async (req: RequisicaoAutenticada, res: Response) => {
   const { data: leads, error } = await supabaseClient
     .from("leads")
-    .select()
+    .select("id, client_id, name, email, phone, source, status, score, score_perfil, score_interesse, estagio_funil, notes, created_at, updated_at")
     .eq("client_id", req.clienteId!)
     .order("score", { ascending: false });
 

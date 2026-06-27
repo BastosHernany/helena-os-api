@@ -16,6 +16,8 @@ export interface Client {
   created_at: string;
 }
 
+export type EstagioFunil = "topo" | "meio" | "fundo";
+
 export interface Lead {
   id: string;
   client_id: string;
@@ -25,6 +27,9 @@ export interface Lead {
   source: LeadSource;
   status: LeadStatus;
   score: number;
+  score_perfil: number;
+  score_interesse: number;
+  estagio_funil: EstagioFunil;
   notes: string | null;
   created_at: string;
   updated_at: string;
