@@ -53,7 +53,7 @@ rotasCampanhasUpload.post(
     const { plataforma, ticket_medio } = validacao.data;
 
     try {
-      const { campanhas, avisos } = processarExcel(req.file.buffer, plataforma, ticket_medio);
+      const { campanhas, avisos } = await processarExcel(req.file.buffer, plataforma, ticket_medio);
 
       const resultados = await Promise.all(
         campanhas.map((campanha: Omit<NovaCampanha, "client_id">) =>

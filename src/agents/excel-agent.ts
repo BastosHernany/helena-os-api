@@ -1,6 +1,6 @@
 // Responsável por ler arquivos Excel exportados do Meta Ads ou Google Ads
 // e extrair as métricas necessárias para o agente de campanhas.
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 import { NovaCampanha } from "./interfaces/campaign.interface";
 
 // ── Mapeamento de colunas por plataforma ─────────────────────────────────────
@@ -64,16 +64,53 @@ function paraNumero(valor: unknown): number {
   return 0;
 }
 
+// ── Extrai o valor "cru" de uma célula do exceljs ────────────────────────────
+// exceljs pode retornar number, string, Date, ou objetos (fórmula, rich text)
+// dependendo do tipo de célula. Normalizamos para number | string.
+
+function valorCelula(valor: ExcelJS.CellValue): unknown {
+  if (valor === null || valor === undefined) return "";
+  if (typeof valor === "object") {
+    if ("result" in valor) return valor.result ?? "";
+    if ("richText" in valor) return valor.richText.map((parte) => parte.text).join("");
+    if ("text" in valor) return valor.text;
+  }
+  return valor;
+}
+
 // ── Lê e processa o buffer do arquivo Excel ──────────────────────────────────
 
-export function processarExcel(
+export async function processarExcel(
   buffer: Buffer,
   plataforma: "meta" | "google",
   ticketMedio?: number
-): ResultadoExcel {
-  const workbook   = XLSX.read(buffer, { type: "buffer" });
-  const planilha   = workbook.Sheets[workbook.SheetNames[0]];
-  const linhas     = XLSX.utils.sheet_to_json<Record<string, unknown>>(planilha, { defval: "" });
+): Promise<ResultadoExcel> {
+  const workbook = new ExcelJS.Workbook();
+  // exceljs traz @types/node@14 via fast-csv, cujo tipo Buffer conflita
+  // estruturalmente com o @types/node do projeto — cast necessário.
+  await workbook.xlsx.load(buffer as any);
+  const planilha = workbook.worksheets[0];
+
+  if (!planilha) {
+    throw new Error("Planilha vazia ou sem dados reconhecíveis");
+  }
+
+  const cabecalhos: string[] = [];
+  planilha.getRow(1).eachCell({ includeEmpty: true }, (celula, numeroColuna) => {
+    cabecalhos[numeroColuna] = String(valorCelula(celula.value)).trim();
+  });
+
+  const linhas: Record<string, unknown>[] = [];
+  planilha.eachRow((linha, numeroLinha) => {
+    if (numeroLinha === 1) return;
+
+    const dadosLinha: Record<string, unknown> = {};
+    linha.eachCell({ includeEmpty: true }, (celula, numeroColuna) => {
+      const cabecalho = cabecalhos[numeroColuna];
+      if (cabecalho) dadosLinha[cabecalho] = valorCelula(celula.value);
+    });
+    linhas.push(dadosLinha);
+  });
 
   if (linhas.length === 0) {
     throw new Error("Planilha vazia ou sem dados reconhecíveis");
@@ -87,14 +124,14 @@ export function processarExcel(
     const dados: DadosBrutosExcel = {};
 
     // Normaliza cada coluna da linha para o campo interno correspondente
-    for (const [colunaOriginal, valorCelula] of Object.entries(linha)) {
+    for (const [colunaOriginal, valorBruto] of Object.entries(linha)) {
       const campoInterno = mapeamento[colunaOriginal.toLowerCase().trim()];
       if (!campoInterno) continue;
 
       if (campoInterno === "nome") {
-        dados.nome = String(valorCelula).trim();
+        dados.nome = String(valorBruto).trim();
       } else {
-        (dados as Record<string, number>)[campoInterno] = paraNumero(valorCelula);
+        (dados as Record<string, number>)[campoInterno] = paraNumero(valorBruto);
       }
     }
 

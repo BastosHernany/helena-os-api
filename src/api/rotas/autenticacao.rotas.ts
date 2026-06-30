@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { z } from "zod";
 import { supabaseClient } from "../../lib/supabase";
+import { limiterAutenticacao } from "../middleware/rate-limit.middleware";
 
 export const rotasAutenticacao = Router();
 
@@ -22,7 +23,7 @@ const schemaLogin = z.object({
 
 // ── POST /api/auth/registrar ──────────────────────────────────────────────────
 
-rotasAutenticacao.post("/registrar", async (req: Request, res: Response) => {
+rotasAutenticacao.post("/registrar", limiterAutenticacao, async (req: Request, res: Response) => {
   const validacao = schemaRegistro.safeParse(req.body);
 
   if (!validacao.success) {
@@ -56,7 +57,7 @@ rotasAutenticacao.post("/registrar", async (req: Request, res: Response) => {
 
 // ── POST /api/auth/login ──────────────────────────────────────────────────────
 
-rotasAutenticacao.post("/login", async (req: Request, res: Response) => {
+rotasAutenticacao.post("/login", limiterAutenticacao, async (req: Request, res: Response) => {
   const validacao = schemaLogin.safeParse(req.body);
 
   if (!validacao.success) {
@@ -72,21 +73,17 @@ rotasAutenticacao.post("/login", async (req: Request, res: Response) => {
     .eq("email", email)
     .single();
 
-  console.log("[login] cliente encontrado:", !!cliente, "| hash presente:", !!cliente?.password_hash, "| erro supabase:", error?.message ?? null);
-
   if (error || !cliente) {
     res.status(401).json({ erro: "E-mail ou senha inválidos" });
     return;
   }
 
   if (!cliente.password_hash) {
-    console.log("[login] password_hash ausente — verifique as policies RLS da tabela clients");
     res.status(401).json({ erro: "E-mail ou senha inválidos" });
     return;
   }
 
   const senhaValida = await bcrypt.compare(senha, cliente.password_hash);
-  console.log("[login] bcrypt.compare resultado:", senhaValida);
 
   if (!senhaValida) {
     res.status(401).json({ erro: "E-mail ou senha inválidos" });
