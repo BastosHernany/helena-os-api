@@ -1,18 +1,36 @@
 import { Router, Request, Response } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import { z } from "zod";
 import { supabaseClient } from "../../lib/supabase";
 
 export const rotasAutenticacao = Router();
 
-rotasAutenticacao.post("/registrar", async (req: Request, res: Response) => {
-  const { nome, email, senha, segmento } = req.body;
+// ── Schemas de validação ──────────────────────────────────────────────────────
 
-  if (!nome || !email || !senha) {
-    res.status(400).json({ erro: "nome, email e senha sao obrigatorios" });
+const schemaRegistro = z.object({
+  nome:     z.string().min(2, "Nome deve ter ao menos 2 caracteres"),
+  email:    z.string().email("E-mail inválido"),
+  senha:    z.string().min(6, "Senha deve ter ao menos 6 caracteres"),
+  segmento: z.string().optional(),
+});
+
+const schemaLogin = z.object({
+  email: z.string().email("E-mail inválido"),
+  senha: z.string().min(1, "Senha obrigatória"),
+});
+
+// ── POST /api/auth/registrar ──────────────────────────────────────────────────
+
+rotasAutenticacao.post("/registrar", async (req: Request, res: Response) => {
+  const validacao = schemaRegistro.safeParse(req.body);
+
+  if (!validacao.success) {
+    res.status(400).json({ erro: validacao.error.issues[0].message });
     return;
   }
 
+  const { nome, email, senha, segmento } = validacao.data;
   const hashSenha = await bcrypt.hash(senha, 10);
 
   const { data: cliente, error } = await supabaseClient
@@ -22,7 +40,8 @@ rotasAutenticacao.post("/registrar", async (req: Request, res: Response) => {
     .single();
 
   if (error) {
-    res.status(400).json({ erro: error.message });
+    const mensagem = error.code === "23505" ? "E-mail já cadastrado" : error.message;
+    res.status(400).json({ erro: mensagem });
     return;
   }
 
@@ -35,13 +54,17 @@ rotasAutenticacao.post("/registrar", async (req: Request, res: Response) => {
   res.status(201).json({ token, cliente: { id: cliente.id, nome: cliente.name, email: cliente.email } });
 });
 
-rotasAutenticacao.post("/login", async (req: Request, res: Response) => {
-  const { email, senha } = req.body;
+// ── POST /api/auth/login ──────────────────────────────────────────────────────
 
-  if (!email || !senha) {
-    res.status(400).json({ erro: "email e senha sao obrigatorios" });
+rotasAutenticacao.post("/login", async (req: Request, res: Response) => {
+  const validacao = schemaLogin.safeParse(req.body);
+
+  if (!validacao.success) {
+    res.status(400).json({ erro: validacao.error.issues[0].message });
     return;
   }
+
+  const { email, senha } = validacao.data;
 
   const { data: cliente, error } = await supabaseClient
     .from("clients")
@@ -52,20 +75,21 @@ rotasAutenticacao.post("/login", async (req: Request, res: Response) => {
   console.log("[login] cliente encontrado:", !!cliente, "| hash presente:", !!cliente?.password_hash, "| erro supabase:", error?.message ?? null);
 
   if (error || !cliente) {
-    res.status(401).json({ erro: "Credenciais invalidas" });
+    res.status(401).json({ erro: "E-mail ou senha inválidos" });
     return;
   }
 
   if (!cliente.password_hash) {
-    console.log("[login] password_hash ausente no retorno do Supabase — verifique as policies RLS da tabela clients");
-    res.status(401).json({ erro: "Credenciais invalidas" });
+    console.log("[login] password_hash ausente — verifique as policies RLS da tabela clients");
+    res.status(401).json({ erro: "E-mail ou senha inválidos" });
     return;
   }
 
   const senhaValida = await bcrypt.compare(senha, cliente.password_hash);
   console.log("[login] bcrypt.compare resultado:", senhaValida);
+
   if (!senhaValida) {
-    res.status(401).json({ erro: "Credenciais invalidas" });
+    res.status(401).json({ erro: "E-mail ou senha inválidos" });
     return;
   }
 
